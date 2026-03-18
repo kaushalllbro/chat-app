@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Private Chat</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#0b141a;
+color:white;
+display:flex;
+flex-direction:column;
+height:100vh;
+margin:0;
+}
+
+#chat{
+flex:1;
+overflow-y:auto;
+padding:10px;
+}
+
+.msg{
+padding:8px;
+margin:6px;
+border-radius:10px;
+max-width:60%;
+}
+
+.me{
+background:#005c4b;
+margin-left:auto;
+}
+
+.other{
+background:#202c33;
+}
+
+#inputArea{
+display:flex;
+background:#202c33;
+padding:10px;
+}
+
+#msg{
+flex:1;
+padding:10px;
+border:none;
+border-radius:6px;
+}
+
+button{
+margin-left:10px;
+padding:10px;
+background:#00a884;
+border:none;
+color:white;
+border-radius:6px;
+}
+
+#typing{
+font-size:12px;
+color:#aaa;
+padding-left:10px;
+}
+
+.time{
+font-size:10px;
+color:#aaa;
+margin-left:6px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<div id="typing"></div>
+
+<div id="inputArea">
+<input id="msg" placeholder="Type message...">
+<button onclick="send()">Send</button>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, update, onValue, set } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+const firebaseConfig = {
+apiKey: "AIzaSyA7aG5ZEZHYc8ai8vtWj_iTSjg95yedCwk",
+authDomain: "chat123-86ac5.firebaseapp.com",
+projectId: "chat123-86ac5",
+storageBucket: "chat123-86ac5.firebasestorage.app",
+messagingSenderId: "543715372055",
+appId: "1:543715372055:web:8196ca626d25e73c210052",
+databaseURL:"https://chat123-86ac5-default-rtdb.firebaseio.com"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const chat = document.getElementById("chat");
+const input = document.getElementById("msg");
+const typingDiv = document.getElementById("typing");
+
+let username = localStorage.getItem("user");
+
+if(!username){
+username = Math.random()>0.5 ? "User1":"User2";
+localStorage.setItem("user",username);
+}
+
+const chatRef = ref(db,"chat");
+const typingRef = ref(db,"typing/"+username);
+
+function send(){
+
+let text = input.value.trim();
+
+if(text==="") return;
+
+push(chatRef,{
+name:username,
+text:text,
+time:Date.now(),
+seen:false
+});
+
+input.value="";
+set(typingRef,false);
+
+}
+
+onChildAdded(chatRef,(data)=>{
+
+let msg=data.val();
+
+let div=document.createElement("div");
+
+div.className="msg "+(msg.name===username?"me":"other");
+
+let time=new Date(msg.time).toLocaleTimeString();
+
+div.innerHTML=
+msg.text+
+"<span class='time'>"+time+"</span>";
+
+chat.appendChild(div);
+
+chat.scrollTop=chat.scrollHeight;
+
+});
+
+input.addEventListener("input",()=>{
+
+set(typingRef,true);
+
+setTimeout(()=>{
+set(typingRef,false);
+},1000);
+
+});
+
+const typingGlobal = ref(db,"typing");
+
+onValue(typingGlobal,(snap)=>{
+
+let data=snap.val();
+
+if(!data) return;
+
+let other=Object.keys(data).find(x=>x!==username);
+
+if(data[other]){
+typingDiv.innerText="typing...";
+}else{
+typingDiv.innerText="";
+}
+
+});
+
+</script>
+
+</body>
+</html>
