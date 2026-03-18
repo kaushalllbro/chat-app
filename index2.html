@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Private Chat</title>
+
+<style>
+
+*{box-sizing:border-box;}
+
+body{
+margin:0;
+font-family:Arial;
+background:#111b21;
+display:flex;
+justify-content:center;
+height:100vh;
+color:white;
+}
+
+#container{
+width:100%;
+max-width:700px;
+display:flex;
+flex-direction:column;
+height:100vh;
+}
+
+#header{
+background:#202c33;
+padding:12px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+font-weight:bold;
+}
+
+#status{
+font-size:12px;
+color:#aaa;
+}
+
+#chat{
+flex:1;
+overflow-y:auto;
+padding:10px;
+}
+
+.bubble{
+max-width:70%;
+padding:10px;
+margin:6px;
+border-radius:10px;
+position:relative;
+word-wrap:break-word;
+}
+
+.me{
+background:#005c4b;
+margin-left:auto;
+}
+
+.other{
+background:#202c33;
+}
+
+.time{
+font-size:10px;
+color:#ccc;
+margin-left:8px;
+}
+
+.tick{
+font-size:11px;
+margin-left:6px;
+}
+
+#typing{
+font-size:12px;
+color:#aaa;
+padding-left:10px;
+height:18px;
+}
+
+#inputArea{
+display:flex;
+padding:10px;
+background:#202c33;
+gap:6px;
+}
+
+#msg{
+flex:1;
+padding:10px;
+border:none;
+border-radius:6px;
+outline:none;
+}
+
+button{
+background:#00a884;
+border:none;
+padding:10px;
+border-radius:6px;
+color:white;
+cursor:pointer;
+}
+
+img{
+max-width:200px;
+border-radius:6px;
+display:block;
+margin-top:5px;
+}
+
+@media (max-width:600px){
+
+.bubble{
+max-width:85%;
+}
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="container">
+
+<div id="header">
+<span>Private Chat</span>
+<span id="status">offline</span>
+</div>
+
+<div id="chat"></div>
+
+<div id="typing"></div>
+
+<div id="inputArea">
+
+<input id="msg" placeholder="Type message">
+
+<input type="file" id="img">
+
+<button onclick="send()">Send</button>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, update, set, onValue } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyA7aG5ZEZHYc8ai8vtWj_iTSjg95yedCwk",
+authDomain:"chat123-86ac5.firebaseapp.com",
+databaseURL:"https://chat123-86ac5-default-rtdb.firebaseio.com",
+projectId:"chat123-86ac5",
+storageBucket:"chat123-86ac5.firebasestorage.app",
+messagingSenderId:"543715372055",
+appId:"1:543715372055:web:8196ca626d25e73c210052"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const chat=document.getElementById("chat");
+const input=document.getElementById("msg");
+const imgInput=document.getElementById("img");
+const typingDiv=document.getElementById("typing");
+const status=document.getElementById("status");
+
+let username=localStorage.getItem("user");
+
+if(!username){
+
+username=Math.random()>0.5?"User1":"User2";
+
+localStorage.setItem("user",username);
+
+}
+
+const chatRef=ref(db,"chat");
+const typingRef=ref(db,"typing/"+username);
+const onlineRef=ref(db,"online/"+username);
+
+set(onlineRef,true);
+
+window.addEventListener("beforeunload",()=>{
+set(onlineRef,false);
+});
+
+function send(){
+
+let text=input.value.trim();
+let imgFile=imgInput.files[0];
+
+if(text==="" && !imgFile) return;
+
+let msgData={
+name:username,
+text:text,
+time:Date.now(),
+seen:false
+};
+
+if(imgFile){
+
+let reader=new FileReader();
+
+reader.onload=e=>{
+
+msgData.image=e.target.result;
+
+push(chatRef,msgData);
+
+};
+
+reader.readAsDataURL(imgFile);
+
+}else{
+
+push(chatRef,msgData);
+
+}
+
+input.value="";
+imgInput.value="";
+
+set(typingRef,false);
+
+}
+
+window.send=send;
+
+onChildAdded(chatRef,(data)=>{
+
+let msg=data.val();
+let id=data.key;
+
+let div=document.createElement("div");
+
+div.className="bubble "+(msg.name===username?"me":"other");
+
+let time=new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+let tick="";
+
+if(msg.name===username){
+
+tick=msg.seen?"✓✓":"✓";
+
+}
+
+let content=msg.text||"";
+
+if(msg.image){
+
+content+="<br><img src='"+msg.image+"'>";
+
+}
+
+div.innerHTML=content+"<span class='time'>"+time+"</span><span class='tick'>"+tick+"</span>";
+
+div.onclick=()=>{
+
+if(msg.name===username){
+
+let newText=prompt("Edit message",msg.text);
+
+if(newText){
+
+update(ref(db,"chat/"+id),{text:newText});
+
+}
+
+}
+
+};
+
+chat.appendChild(div);
+
+chat.scrollTop=chat.scrollHeight;
+
+if(msg.name!==username){
+
+update(ref(db,"chat/"+id),{seen:true});
+
+}
+
+});
+
+input.addEventListener("input",()=>{
+
+set(typingRef,true);
+
+setTimeout(()=>{
+
+set(typingRef,false);
+
+},1200);
+
+});
+
+onValue(ref(db,"typing"),(snap)=>{
+
+let data=snap.val();
+
+if(!data) return;
+
+let other=Object.keys(data).find(x=>x!==username);
+
+if(other && data[other]){
+
+typingDiv.innerText="typing...";
+
+}else{
+
+typingDiv.innerText="";
+
+}
+
+});
+
+onValue(ref(db,"online"),(snap)=>{
+
+let data=snap.val();
+
+if(!data) return;
+
+let other=Object.keys(data).find(x=>x!==username);
+
+if(other && data[other]){
+
+status.innerText="online";
+
+}else{
+
+status.innerText="offline";
+
+}
+
+});
+
+</script>
+
+</body>
+</html>
