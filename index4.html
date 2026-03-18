@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Private Chat</title>
+
+<style>
+
+*{box-sizing:border-box;}
+
+body{
+margin:0;
+font-family:Arial;
+background:#111b21;
+height:100vh;
+display:flex;
+justify-content:center;
+}
+
+#app{
+width:100%;
+max-width:700px;
+display:flex;
+flex-direction:column;
+height:100vh;
+}
+
+header{
+background:#202c33;
+padding:12px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+#status{
+font-size:12px;
+color:#aaa;
+}
+
+#chat{
+flex:1;
+overflow-y:auto;
+padding:10px;
+display:flex;
+flex-direction:column;
+}
+
+.bubble{
+max-width:75%;
+padding:10px;
+border-radius:10px;
+margin:5px;
+word-wrap:break-word;
+position:relative;
+}
+
+.me{
+background:#005c4b;
+align-self:flex-end;
+}
+
+.other{
+background:#202c33;
+align-self:flex-start;
+}
+
+.time{
+font-size:10px;
+color:#ccc;
+margin-left:8px;
+}
+
+.tick{
+font-size:11px;
+margin-left:4px;
+}
+
+.reply{
+font-size:12px;
+border-left:3px solid #00a884;
+padding-left:5px;
+margin-bottom:4px;
+color:#ccc;
+}
+
+img{
+max-width:200px;
+border-radius:6px;
+margin-top:5px;
+}
+
+audio{
+margin-top:5px;
+width:200px;
+}
+
+#typing{
+font-size:12px;
+color:#aaa;
+padding-left:10px;
+height:18px;
+}
+
+#inputArea{
+display:flex;
+gap:6px;
+padding:8px;
+background:#202c33;
+position:sticky;
+bottom:0;
+}
+
+#msg{
+flex:1;
+padding:10px;
+border:none;
+border-radius:20px;
+outline:none;
+}
+
+button{
+background:#00a884;
+border:none;
+padding:8px 12px;
+border-radius:8px;
+color:white;
+}
+
+#replyBox{
+font-size:12px;
+padding:4px;
+color:#aaa;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+<header>
+<div>Private Chat</div>
+<div id="status">offline</div>
+</header>
+
+<div id="chat"></div>
+
+<div id="typing"></div>
+
+<div id="replyBox"></div>
+
+<div id="inputArea">
+
+<input id="msg" placeholder="Type message">
+
+<input type="file" id="img">
+
+<button id="record">🎤</button>
+
+<button onclick="send()">Send</button>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import {getDatabase,ref,push,onChildAdded,update,set,onValue,remove} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyA7aG5ZEZHYc8ai8vtWj_iTSjg95yedCwk",
+authDomain:"chat123-86ac5.firebaseapp.com",
+databaseURL:"https://chat123-86ac5-default-rtdb.firebaseio.com",
+projectId:"chat123-86ac5",
+storageBucket:"chat123-86ac5.firebasestorage.app",
+messagingSenderId:"543715372055",
+appId:"1:543715372055:web:8196ca626d25e73c210052"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const chat=document.getElementById("chat");
+const input=document.getElementById("msg");
+const imgInput=document.getElementById("img");
+const typingDiv=document.getElementById("typing");
+const status=document.getElementById("status");
+const replyBox=document.getElementById("replyBox");
+
+let replyTo=null;
+
+let username=localStorage.getItem("user");
+
+if(!username){
+username=Math.random()>0.5?"User1":"User2";
+localStorage.setItem("user",username);
+}
+
+const chatRef=ref(db,"chat");
+const typingRef=ref(db,"typing/"+username);
+const onlineRef=ref(db,"online/"+username);
+
+set(onlineRef,true);
+
+window.addEventListener("beforeunload",()=>set(onlineRef,false));
+
+function send(){
+
+let text=input.value.trim();
+let imgFile=imgInput.files[0];
+
+if(text==="" && !imgFile) return;
+
+let msg={
+name:username,
+text:text,
+time:Date.now(),
+seen:false,
+reply:replyTo
+};
+
+if(imgFile){
+
+let reader=new FileReader();
+
+reader.onload=e=>{
+msg.image=e.target.result;
+push(chatRef,msg);
+};
+
+reader.readAsDataURL(imgFile);
+
+}else{
+push(chatRef,msg);
+}
+
+input.value="";
+imgInput.value="";
+replyTo=null;
+replyBox.innerText="";
+}
+
+window.send=send;
+
+input.addEventListener("keypress",e=>{
+if(e.key==="Enter") send();
+});
+
+onChildAdded(chatRef,(data)=>{
+
+let msg=data.val();
+let id=data.key;
+
+let div=document.createElement("div");
+
+div.className="bubble "+(msg.name===username?"me":"other");
+
+let time=new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+let tick=msg.name===username?(msg.seen?"✓✓":"✓"):"";
+
+let replyHTML="";
+
+if(msg.reply){
+replyHTML="<div class='reply'>"+msg.reply+"</div>";
+}
+
+let content=msg.text||"";
+
+if(msg.image) content+="<br><img src='"+msg.image+"'>";
+
+if(msg.voice) content+="<br><audio controls src='"+msg.voice+"'></audio>";
+
+div.innerHTML=replyHTML+content+" <span class='time'>"+time+"</span><span class='tick'>"+tick+"</span>";
+
+div.onclick=()=>{
+replyTo=msg.text;
+replyBox.innerText="Replying: "+msg.text;
+};
+
+let pressTimer;
+
+div.onmousedown=()=>{
+pressTimer=setTimeout(()=>{
+if(msg.name===username){
+remove(ref(db,"chat/"+id));
+}
+},800);
+};
+
+div.onmouseup=()=>clearTimeout(pressTimer);
+
+chat.appendChild(div);
+
+chat.scrollTop=chat.scrollHeight;
+
+if(msg.name!==username){
+update(ref(db,"chat/"+id),{seen:true});
+if(navigator.vibrate) navigator.vibrate(80);
+}
+
+});
+
+input.addEventListener("input",()=>{
+
+set(typingRef,true);
+
+setTimeout(()=>set(typingRef,false),1200);
+
+});
+
+onValue(ref(db,"typing"),snap=>{
+
+let data=snap.val();
+if(!data) return;
+
+let other=Object.keys(data).find(x=>x!==username);
+
+typingDiv.innerText=(other && data[other])?"typing...":"";
+
+});
+
+onValue(ref(db,"online"),snap=>{
+
+let data=snap.val();
+if(!data) return;
+
+let other=Object.keys(data).find(x=>x!==username);
+
+status.innerText=(other && data[other])?"online":"offline";
+
+});
+
+let mediaRecorder;
+let audioChunks=[];
+
+document.getElementById("record").onclick=async()=>{
+
+if(!mediaRecorder){
+
+let stream=await navigator.mediaDevices.getUserMedia({audio:true});
+
+mediaRecorder=new MediaRecorder(stream);
+
+mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
+
+mediaRecorder.onstop=()=>{
+
+let blob=new Blob(audioChunks);
+
+let reader=new FileReader();
+
+reader.onload=e=>{
+
+push(chatRef,{
+name:username,
+voice:e.target.result,
+time:Date.now()
+});
+
+};
+
+reader.readAsDataURL(blob);
+
+audioChunks=[];
+
+};
+
+mediaRecorder.start();
+
+}else{
+
+mediaRecorder.stop();
+
+mediaRecorder=null;
+
+}
+
+};
+
+</script>
+
+</body>
+</html>
