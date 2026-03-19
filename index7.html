@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>SwiftChat</title>
+
+<style>
+
+*{box-sizing:border-box;}
+
+body{
+margin:0;
+font-family:Arial;
+background:#0b141a;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+color:white;
+}
+
+#app{
+width:100%;
+max-width:700px;
+min-width:250px;
+height:100vh;
+min-height:500px;
+display:flex;
+flex-direction:column;
+background:#111b21;
+}
+
+header{
+background:#202c33;
+padding:10px;
+display:flex;
+justify-content:space-between;
+}
+
+.sectionTitle{
+padding:6px 10px;
+font-size:12px;
+color:#aaa;
+}
+
+.user{
+padding:10px;
+border-bottom:1px solid #2a3942;
+cursor:pointer;
+font-size:13px;
+}
+
+.user:hover{
+background:#1f2c34;
+}
+
+#chatRoom{
+display:none;
+flex-direction:column;
+height:100%;
+}
+
+#messages{
+flex:1;
+overflow:auto;
+padding:8px;
+display:flex;
+flex-direction:column;
+}
+
+.bubble{
+max-width:75%;
+padding:8px;
+margin:4px;
+border-radius:10px;
+font-size:13px;
+}
+
+.me{
+background:#005c4b;
+align-self:flex-end;
+}
+
+.other{
+background:#202c33;
+align-self:flex-start;
+}
+
+#inputArea{
+display:flex;
+padding:8px;
+background:#202c33;
+gap:6px;
+}
+
+#msg{
+flex:1;
+padding:8px;
+border:none;
+border-radius:20px;
+outline:none;
+font-size:13px;
+}
+
+button{
+background:#00a884;
+border:none;
+padding:6px 10px;
+color:white;
+border-radius:6px;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+<header>
+<div>SwiftChat</div>
+</header>
+
+<div id="main">
+
+<div class="sectionTitle">Online</div>
+<div id="onlineList"></div>
+
+<div class="sectionTitle">Everyone</div>
+<div id="allUsers"></div>
+
+</div>
+
+<div id="chatRoom">
+
+<header>
+<button onclick="back()">←</button>
+<div id="chatTitle"></div>
+</header>
+
+<div id="messages"></div>
+
+<div id="inputArea">
+<input id="msg" placeholder="Message">
+<button onclick="send()">Send</button>
+</div>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import {getDatabase,ref,set,onValue,push,onChildAdded,onDisconnect} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"YOUR_API_KEY",
+authDomain:"YOUR_PROJECT.firebaseapp.com",
+databaseURL:"YOUR_DATABASE_URL",
+projectId:"YOUR_PROJECT"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+
+
+let username=localStorage.getItem("swiftchat_user");
+
+if(!username){
+
+username=prompt("Enter your name (This cannot be changed later)");
+
+if(!username || username.trim()===""){
+alert("Name required");
+location.reload();
+}
+
+localStorage.setItem("swiftchat_user",username);
+
+}
+
+
+const userRef=ref(db,"users/"+username);
+set(userRef,{name:username});
+
+
+const onlineRef=ref(db,"online/"+username);
+set(onlineRef,true);
+
+onDisconnect(onlineRef).remove();
+
+
+
+const onlineList=document.getElementById("onlineList");
+const allUsers=document.getElementById("allUsers");
+
+
+onValue(ref(db,"online"),snap=>{
+
+onlineList.innerHTML="";
+
+let data=snap.val();
+
+if(!data) return;
+
+Object.keys(data).forEach(u=>{
+
+if(u===username) return;
+
+let div=document.createElement("div");
+
+div.className="user";
+
+div.innerText=u;
+
+div.onclick=()=>openChat(u);
+
+onlineList.appendChild(div);
+
+});
+
+});
+
+
+onValue(ref(db,"users"),snap=>{
+
+allUsers.innerHTML="";
+
+let data=snap.val();
+
+if(!data) return;
+
+Object.keys(data).forEach(u=>{
+
+if(u===username) return;
+
+let div=document.createElement("div");
+
+div.className="user";
+
+div.innerText=u;
+
+div.onclick=()=>openChat(u);
+
+allUsers.appendChild(div);
+
+});
+
+});
+
+
+let currentChat=null;
+
+function chatID(u1,u2){
+
+return [u1,u2].sort().join("_");
+
+}
+
+
+function openChat(other){
+
+currentChat=chatID(username,other);
+
+document.getElementById("main").style.display="none";
+document.getElementById("chatRoom").style.display="flex";
+
+document.getElementById("chatTitle").innerText=other;
+
+document.getElementById("messages").innerHTML="";
+
+onChildAdded(ref(db,"messages/"+currentChat),snap=>{
+
+let m=snap.val();
+
+let div=document.createElement("div");
+
+div.className="bubble "+(m.sender===username?"me":"other");
+
+div.innerText=m.sender+": "+m.text;
+
+document.getElementById("messages").appendChild(div);
+
+});
+
+}
+
+
+function send(){
+
+let input=document.getElementById("msg");
+
+let text=input.value.trim();
+
+if(!text) return;
+
+push(ref(db,"messages/"+currentChat),{
+
+sender:username,
+text:text,
+time:Date.now()
+
+});
+
+input.value="";
+
+}
+
+
+function back(){
+
+document.getElementById("chatRoom").style.display="none";
+document.getElementById("main").style.display="block";
+
+}
+
+
+window.send=send;
+window.back=back;
+
+</script>
+
+</body>
+</html>
