@@ -170,18 +170,21 @@ const db=getDatabase(app);
 
 
 
-let username=localStorage.getItem("swiftchat_user");
+let username = localStorage.getItem("swiftchat_user");
 
-if(!username){
+while(!username || username.trim()===""){
 
-username=prompt("Enter your name (This cannot be changed later)");
+username = prompt("Enter your name.\n\n⚠ This cannot be changed later.");
 
-if(!username || username.trim()===""){
-alert("Name required");
-location.reload();
+if(username && username.trim()!==""){
+
+localStorage.setItem("swiftchat_user",username.trim());
+
+}else{
+
+alert("Name is required to use SwiftChat");
+
 }
-
-localStorage.setItem("swiftchat_user",username);
 
 }
 
