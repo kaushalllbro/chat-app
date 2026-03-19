@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>SwiftChat</title>
+
+<style>
+
+*{
+box-sizing:border-box;
+}
+
+body{
+margin:0;
+background:#0b141a;
+font-family:Arial;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+color:white;
+}
+
+#app{
+width:100%;
+max-width:700px;
+min-width:250px;
+height:100vh;
+min-height:500px;
+display:flex;
+flex-direction:column;
+background:#111b21;
+}
+
+header{
+background:#202c33;
+padding:10px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+font-size:14px;
+}
+
+#chatList{
+flex:1;
+overflow:auto;
+}
+
+.chatItem{
+padding:10px;
+border-bottom:1px solid #2a3942;
+cursor:pointer;
+font-size:13px;
+}
+
+.chatItem:hover{
+background:#1f2c34;
+}
+
+#chatRoom{
+display:none;
+flex-direction:column;
+height:100%;
+}
+
+#messages{
+flex:1;
+overflow:auto;
+padding:8px;
+display:flex;
+flex-direction:column;
+}
+
+.bubble{
+max-width:75%;
+padding:8px 10px;
+margin:4px;
+border-radius:10px;
+font-size:13px;
+word-wrap:break-word;
+}
+
+.me{
+background:#005c4b;
+align-self:flex-end;
+}
+
+.other{
+background:#202c33;
+align-self:flex-start;
+}
+
+#inputArea{
+display:flex;
+gap:6px;
+padding:8px;
+background:#202c33;
+}
+
+#msg{
+flex:1;
+padding:8px;
+border:none;
+border-radius:20px;
+font-size:13px;
+outline:none;
+}
+
+button{
+background:#00a884;
+border:none;
+color:white;
+padding:6px 10px;
+border-radius:6px;
+font-size:12px;
+cursor:pointer;
+}
+
+button:active{
+opacity:.8;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="app">
+
+<header>
+<div>SwiftChat</div>
+<div>
+<button onclick="createPrivate()">+Chat</button>
+<button onclick="createGroup()">+Group</button>
+</div>
+</header>
+
+<div id="chatList"></div>
+
+<div id="chatRoom">
+
+<header>
+<button onclick="back()">←</button>
+<div id="chatTitle">Chat</div>
+</header>
+
+<div id="messages"></div>
+
+<div id="inputArea">
+<input id="msg" placeholder="Message">
+<button onclick="send()">Send</button>
+</div>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import {getDatabase,ref,push,set,onValue,onChildAdded} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+
+const firebaseConfig={
+apiKey:"YOUR_API_KEY",
+authDomain:"YOUR_PROJECT.firebaseapp.com",
+databaseURL:"YOUR_DATABASE_URL",
+projectId:"YOUR_PROJECT"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+
+let username=localStorage.getItem("swiftchat_user");
+
+if(!username){
+
+username=prompt("Enter your name");
+
+if(!username || username.trim()==="") username="User"+Math.floor(Math.random()*9999);
+
+localStorage.setItem("swiftchat_user",username);
+
+}
+
+
+const chatList=document.getElementById("chatList");
+const messages=document.getElementById("messages");
+
+let currentChat=null;
+
+
+function loadChats(){
+
+onValue(ref(db,"chats"),snap=>{
+
+chatList.innerHTML="";
+
+let data=snap.val();
+
+if(!data) return;
+
+Object.entries(data).forEach(([id,chat])=>{
+
+if(chat.members && chat.members[username]){
+
+let div=document.createElement("div");
+
+div.className="chatItem";
+
+div.innerText=chat.name;
+
+div.onclick=()=>openChat(id,chat.name);
+
+chatList.appendChild(div);
+
+}
+
+});
+
+});
+
+}
+
+loadChats();
+
+
+
+function createPrivate(){
+
+let other=prompt("Enter username");
+
+if(!other) return;
+
+let chatID="chat_"+Date.now();
+
+set(ref(db,"chats/"+chatID),{
+
+name:other,
+type:"private",
+members:{
+[username]:true,
+[other]:true
+}
+
+});
+
+}
+
+
+
+function createGroup(){
+
+let name=prompt("Group name");
+
+let members=prompt("Members separated by comma");
+
+if(!name || !members) return;
+
+let mem={};
+
+mem[username]=true;
+
+members.split(",").forEach(u=>{
+mem[u.trim()]=true;
+});
+
+let chatID="group_"+Date.now();
+
+set(ref(db,"chats/"+chatID),{
+
+name:name,
+type:"group",
+members:mem
+
+});
+
+}
+
+
+
+function openChat(id,title){
+
+currentChat=id;
+
+chatList.style.display="none";
+
+document.getElementById("chatRoom").style.display="flex";
+
+document.getElementById("chatTitle").innerText=title;
+
+messages.innerHTML="";
+
+onChildAdded(ref(db,"messages/"+id),snap=>{
+
+let m=snap.val();
+
+let div=document.createElement("div");
+
+div.className="bubble "+(m.sender===username?"me":"other");
+
+div.innerText=m.sender+": "+m.text;
+
+messages.appendChild(div);
+
+messages.scrollTop=messages.scrollHeight;
+
+});
+
+}
+
+
+
+function send(){
+
+let input=document.getElementById("msg");
+
+let text=input.value.trim();
+
+if(!text) return;
+
+push(ref(db,"messages/"+currentChat),{
+
+sender:username,
+text:text,
+time:Date.now()
+
+});
+
+input.value="";
+
+}
+
+
+
+function back(){
+
+chatList.style.display="block";
+
+document.getElementById("chatRoom").style.display="none";
+
+}
+
+window.send=send;
+window.back=back;
+window.createPrivate=createPrivate;
+window.createGroup=createGroup;
+
+</script>
+
+</body>
+</html>
